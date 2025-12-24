@@ -46,7 +46,7 @@ const handler = createMcpHandler(async (server) => {
     {
       title: "Get Cryptocurrency Market Data",
       description:
-        "Fetches cryptocurrency market data including prices, RSI indicators, market cap, and volume from CoinMarketCap. Use this when users ask about cryptocurrency prices, RSI values, top coins, market movements, or any crypto market-related questions.",
+        "Fetches public cryptocurrency market data from CoinMarketCap API including prices, RSI indicators, market cap, and volume. This tool only retrieves publicly available market data and does not require any user information or location data. Use this when users ask about cryptocurrency prices, RSI values, top coins, market movements, or any crypto market-related questions.",
       inputSchema: {
         query: z
           .string()
@@ -55,7 +55,10 @@ const handler = createMcpHandler(async (server) => {
             "Optional query parameter. The tool will fetch market data regardless of input. GPT will analyze the data to answer user questions."
           ),
       },
-      _meta: {},
+      _meta: {
+        "openai/toolInvocation/invoking": "Fetching cryptocurrency market data...",
+        "openai/toolInvocation/invoked": "Market data retrieved",
+      },
     },
     async ({ query }) => {
       try {

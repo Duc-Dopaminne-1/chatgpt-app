@@ -1,99 +1,102 @@
-import { baseURL } from "@/baseUrl";
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 
-const getAppsSdkCompatibleHtml = async (baseUrl: string, path: string) => {
-  const result = await fetch(`${baseUrl}${path}`);
-  return await result.text();
-};
+const COINMARKETCAP_API_URL =
+  "https://api.coinmarketcap.com/data-api/v3/cryptocurrency/rsi/heatmap/table?limit=1000";
 
-type ContentWidget = {
-  id: string;
-  title: string;
-  templateUri: string;
-  invoking: string;
-  invoked: string;
-  html: string;
-  description: string;
-  widgetDomain: string;
+type CoinMarketCapResponse = {
+  data: {
+    data: Array<{
+      id: string;
+      symbol: string;
+      slug: string;
+      name: string;
+      marketCap: number;
+      volume24h: number;
+      price: number;
+      price24h: number;
+      rank: number;
+      rsi: {
+        rsi15m: number;
+        rsi1h: number;
+        rsi4h: number;
+        rsi24h: number;
+        rsi7d: number;
+      };
+    }>;
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalItems: string;
+      itemsPerPage: number;
+    };
+  };
+  status: {
+    timestamp: string;
+    error_code: string;
+    error_message: string;
+    elapsed: string;
+    credit_count: number;
+  };
 };
-
-function widgetMeta(widget: ContentWidget) {
-  return {
-    "openai/outputTemplate": widget.templateUri,
-    "openai/toolInvocation/invoking": widget.invoking,
-    "openai/toolInvocation/invoked": widget.invoked,
-    "openai/widgetAccessible": false,
-    "openai/resultCanProduceWidget": true,
-  } as const;
-}
 
 const handler = createMcpHandler(async (server) => {
-  const html = await getAppsSdkCompatibleHtml(baseURL, "/");
-
-  const contentWidget: ContentWidget = {
-    id: "show_content",
-    title: "Show Content",
-    templateUri: "ui://widget/content-template.html",
-    invoking: "Loading content...",
-    invoked: "Content loaded",
-    html: html,
-    description: "Displays the homepage content",
-    widgetDomain: "https://nextjs.org/docs",
-  };
-  server.registerResource(
-    "content-widget",
-    contentWidget.templateUri,
-    {
-      title: contentWidget.title,
-      description: contentWidget.description,
-      mimeType: "text/html+skybridge",
-      _meta: {
-        "openai/widgetDescription": contentWidget.description,
-        "openai/widgetPrefersBorder": true,
-      },
-    },
-    async (uri) => ({
-      contents: [
-        {
-          uri: uri.href,
-          mimeType: "text/html+skybridge",
-          text: `<html>${contentWidget.html}</html>`,
-          _meta: {
-            "openai/widgetDescription": contentWidget.description,
-            "openai/widgetPrefersBorder": true,
-            "openai/widgetDomain": contentWidget.widgetDomain,
-          },
-        },
-      ],
-    })
-  );
-
   server.registerTool(
-    contentWidget.id,
+    "get_crypto_market_data",
     {
-      title: contentWidget.title,
+      title: "Get Cryptocurrency Market Data",
       description:
-        "Fetch and display the homepage content with the name of the user",
+        "Fetches cryptocurrency market data including prices, RSI indicators, market cap, and volume from CoinMarketCap. Use this when users ask about cryptocurrency prices, RSI values, top coins, market movements, or any crypto market-related questions.",
       inputSchema: {
-        name: z.string().describe("The name of the user to display on the homepage"),
+        query: z
+          .string()
+          .optional()
+          .describe(
+            "Optional query parameter. The tool will fetch market data regardless of input. GPT will analyze the data to answer user questions."
+          ),
       },
-      _meta: widgetMeta(contentWidget),
+      _meta: {},
     },
-    async ({ name }) => {
-      return {
-        content: [
-          {
-            type: "text",
-            text: name,
+    async ({ query }) => {
+      try {
+        const response = await fetch(COINMARKETCAP_API_URL);
+        
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+
+        const data: CoinMarketCapResponse = await response.json();
+
+        if (data.status.error_code !== "0") {
+          throw new Error(`API error: ${data.status.error_message}`);
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(data, null, 2),
+            },
+          ],
+          structuredContent: {
+            cryptocurrencies: data.data.data,
+            pagination: data.data.pagination,
+            timestamp: data.status.timestamp,
           },
-        ],
-        structuredContent: {
-          name: name,
-          timestamp: new Date().toISOString(),
-        },
-        _meta: widgetMeta(contentWidget),
-      };
+        };
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error occurred";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error fetching cryptocurrency market data: ${errorMessage}`,
+            },
+          ],
+          isError: true,
+        };
+      }
     }
   );
 });

@@ -2,7 +2,7 @@ import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 
 const COINMARKETCAP_API_URL =
-  "https://api.coinmarketcap.com/data-api/v3/cryptocurrency/rsi/heatmap/table?limit=1000";
+  "https://api.coinmarketcap.com/data-api/v3/cryptocurrency/rsi/heatmap/table?limit=500&page=1&volume24hRange.min=1000000&marketCapRange.min=50000000&sort=rsi4h&ascendingOrder=false";
 
 type CoinMarketCapResponse = {
   data: {
@@ -63,7 +63,7 @@ const handler = createMcpHandler(async (server) => {
     async ({ query }) => {
       try {
         const response = await fetch(COINMARKETCAP_API_URL);
-        
+
         if (!response.ok) {
           throw new Error(`API request failed: ${response.status} ${response.statusText}`);
         }
